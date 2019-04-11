@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.5)
 project(poly_exploration_ros)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 # Default to C++14
 if(NOT CMAKE_CXX_STANDARD)
   set(CMAKE_CXX_STANDARD 17)
@@ -16,6 +18,8 @@ find_package(rclcpp REQUIRED)
 find_package(message_filters REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
 find_package(poly_exploration REQUIRED)
 
 include_directories(include)
@@ -38,7 +42,7 @@ endif()
 add_executable(polygon_exploration_ros src/main.cpp src/PolygonExplorerNode.cpp)
 target_link_libraries(polygon_exploration_ros poly_exploration::poly_exploration)
 ament_target_dependencies(polygon_exploration_ros
-  poly_exploration::poly_exploration class_loader rclcpp message_filters sensor_msgs)
+  poly_exploration::poly_exploration class_loader rclcpp message_filters sensor_msgs geometry_msgs nav_msgs)
 #add_dependencies(polygon_exploration_ros ${catkin_EXPORTED_TARGETS} poly_exploration)
 
 install(TARGETS
