@@ -20,7 +20,8 @@ class PolygonExplorerNode : public rclcpp::Node,
  public:
   PolygonExplorerNode();
 
-  virtual void updateVisualizationCallback(const PoseGraph pose_graph) override;
+  virtual void updateVisualizationCallback(const PoseGraph pose_graph,
+                                           const TimeStamp time_stamp) override;
 
  private:
   void subscriberCallback(

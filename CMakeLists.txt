@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.5)
 project(poly_exploration_ros)
 
+set(CMAKE_BUILD_TYPE Debug)
+
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Default to C++14
@@ -9,7 +11,7 @@ if(NOT CMAKE_CXX_STANDARD)
 endif()
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  add_compile_options(-Wall -Wextra -Wpedantic)
+  add_compile_options(-g -ggdb3 -Wall -Wall -Wextra -Wpedantic)
 endif()
 
 find_package(ament_cmake REQUIRED)
@@ -18,8 +20,11 @@ find_package(rclcpp REQUIRED)
 find_package(message_filters REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
-find_package(nav_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(visualization_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(tf2_msgs REQUIRED)
 find_package(poly_exploration REQUIRED)
 
 include_directories(include)
@@ -38,11 +43,12 @@ if(NOT WIN32)
     )
 endif()
 
+ament_python_install_package(scripts/)
 
 add_executable(polygon_exploration_ros src/main.cpp src/PolygonExplorerNode.cpp)
 target_link_libraries(polygon_exploration_ros poly_exploration::poly_exploration)
 ament_target_dependencies(polygon_exploration_ros
-  poly_exploration::poly_exploration class_loader rclcpp message_filters sensor_msgs geometry_msgs nav_msgs)
+  poly_exploration::poly_exploration class_loader rclcpp rclcpp_components message_filters sensor_msgs geometry_msgs nav_msgs visualization_msgs)
 #add_dependencies(polygon_exploration_ros ${catkin_EXPORTED_TARGETS} poly_exploration)
 
 install(TARGETS
@@ -54,5 +60,10 @@ install(TARGETS
 install(TARGETS
   polygon_exploration_ros
   DESTINATION lib/${PROJECT_NAME})
+
+install(PROGRAMS
+  scripts/test_publisher.py
+  DESTINATION bin
+)
 
 ament_package()
