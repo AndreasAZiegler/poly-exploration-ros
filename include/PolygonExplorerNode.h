@@ -54,4 +54,6 @@ class PolygonExplorerNode : public rclcpp::Node,
       poseGraphVisualizationPublisher_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr
       polygonVisualizationPublisher_;
+  rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr
+      polygonPointsVisualizationPublisher_;
 };

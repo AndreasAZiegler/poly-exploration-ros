@@ -12,11 +12,15 @@ PolygonExplorerNode::PolygonExplorerNode()
       odometrySubscription_(
           message_filters::Subscriber<nav_msgs::msg::Odometry>(this, "odom")),
       laserSubscription_(
-          message_filters::Subscriber<sensor_msgs::msg::LaserScan>(
-              this, "laser_scan")),
+          message_filters::Subscriber<sensor_msgs::msg::LaserScan>(this,
+                                                                   "scan")),
       timeSynchronizer_(odometrySubscription_, laserSubscription_, 1) {
   poseGraphVisualizationPublisher_ =
       create_publisher<visualization_msgs::msg::Marker>("posegraph");
+  polygonVisualizationPublisher_ =
+      create_publisher<visualization_msgs::msg::MarkerArray>("polygons");
+  polygonPointsVisualizationPublisher_ =
+      create_publisher<visualization_msgs::msg::Marker>("polygon_points");
   polygonExplorer_.setCallBack(this);
   timeSynchronizer_.registerCallback(&PolygonExplorerNode::subscriberCallback,
                                      this);
@@ -27,6 +31,16 @@ void PolygonExplorerNode::subscriberCallback(
     const std::shared_ptr<nav_msgs::msg::Odometry>& odometry,
     const std::shared_ptr<sensor_msgs::msg::LaserScan>& laser_scan) {
   std::vector<PolygonPoint> polygon_points;
+  for (unsigned int i = 0; i < 5; ++i) {
+    double theta = laser_scan->angle_min;
+    double range = *(laser_scan->ranges.begin()) * i / 5;
+    double x = range * cos(theta);
+    double y = range * sin(theta);
+
+    PointType point_type = PointType::MAX_RANGE;
+    polygon_points.emplace_back(x, y, point_type);
+  }
+
   for (unsigned int i = 0; i < laser_scan->ranges.size(); ++i) {
     double theta = laser_scan->angle_min + i * laser_scan->angle_increment;
     double x = laser_scan->ranges.at(i) * cos(theta);
@@ -42,7 +56,19 @@ void PolygonExplorerNode::subscriberCallback(
     polygon_points.emplace_back(x, y, point_type);
   }
 
+  for (unsigned int i = 0; i < 5; ++i) {
+    double theta = laser_scan->angle_max;
+    double range = *(laser_scan->ranges.end()) * i / 5;
+    double x = range * cos(theta);
+    double y = range * sin(theta);
+
+    PointType point_type = PointType::MAX_RANGE;
+    polygon_points.emplace_back(x, y, point_type);
+  }
+  polygon_points.emplace_back(*polygon_points.begin());
+
   // Polygon has to be closed (first and last point have to be the same)
+  /*
   double theta = laser_scan->angle_min + 0 * laser_scan->angle_increment;
   double x = laser_scan->ranges.at(0) * cos(theta);
   double y = laser_scan->ranges.at(0) * sin(theta);
@@ -54,13 +80,14 @@ void PolygonExplorerNode::subscriberCallback(
   }
 
   polygon_points.emplace_back(x, y, point_type);
+  */
 
   Polygon polygon(polygon_points);
 
   Pose current_pose;
   convertFromRosGeometryMsg(odometry->pose, current_pose);
   auto position_diff = current_pose.getPosition() - previousPose_.getPosition();
-  //std::cout << "position_diff: " << position_diff << std::endl;
+  // std::cout << "position_diff: " << position_diff << std::endl;
 
   // Return (and do not update pose graph) if the robot did not move enough
   if (position_diff.norm() < 0.1) {
@@ -78,7 +105,7 @@ void PolygonExplorerNode::subscriberCallback(
 
   previousPose_ = current_pose;
 
-  //std::cout << "transformation_previous_pose_current_pose: " << std::endl
+  // std::cout << "transformation_previous_pose_current_pose: " << std::endl
   //          << transformation_previous_pose_current_pose << std::endl;
   TimeStamp time_stamp = {laser_scan->header.stamp.sec,
                           laser_scan->header.stamp.nanosec};
@@ -128,6 +155,7 @@ void PolygonExplorerNode::updateVisualizationCallback(
   visualization_msgs::msg::Marker pose_graph_marker;
   pose_graph_marker.header = header;
   // pose_graph_marker.ns = "pose_graph";
+  // Due to some reasons rviz2 crashes if frames are locked
   // pose_graph_marker.frame_locked = true;
   pose_graph_marker.type = visualization_msgs::msg::Marker::LINE_LIST;
   pose_graph_marker.action = visualization_msgs::msg::Marker::ADD;
@@ -211,6 +239,127 @@ void PolygonExplorerNode::updateVisualizationCallback(
   }
 
   poseGraphVisualizationPublisher_->publish(pose_graph_marker);
+
+  visualization_msgs::msg::MarkerArray polygon_markers;
+  polygon_markers.markers.clear();
+
+  visualization_msgs::msg::Marker polygon_marker_template;
+  polygon_marker_template.header = header;
+  polygon_marker_template.header.frame_id = "world";
+  // polygon_marker.ns = "pose_graph";
+  // Due to some reasons rviz2 crashes if frames are locked
+  // polygon_marker.frame_locked = true;
+  polygon_marker_template.type = visualization_msgs::msg::Marker::LINE_STRIP;
+  polygon_marker_template.action = visualization_msgs::msg::Marker::MODIFY;
+  polygon_marker_template.color.r = 0.0;
+  polygon_marker_template.color.g = 0.0;
+  polygon_marker_template.color.b = 0.0;
+  polygon_marker_template.color.a = 1.0;
+
+  polygon_marker_template.pose.position.x = 0;
+  polygon_marker_template.pose.position.y = 0;
+  polygon_marker_template.pose.position.z = 0;
+  polygon_marker_template.pose.orientation.x = 0;
+  polygon_marker_template.pose.orientation.y = 0;
+  polygon_marker_template.pose.orientation.z = 0;
+  polygon_marker_template.pose.orientation.w = 1;
+  polygon_marker_template.scale.x = 0.1;
+  polygon_marker_template.scale.y = 0.0;
+  polygon_marker_template.scale.z = 0.0;
+
+  polygon_marker_template.points.clear();
+  polygon_marker_template.colors.clear();
+
+  visualization_msgs::msg::Marker polygon_points_marker;
+  polygon_points_marker.header = header;
+  // polygon_points_marker.ns = "pose_graph";
+  // Due to some reasons rviz2 crashes if frames are locked
+  // polygon_points_marker.frame_locked = true;
+  polygon_points_marker.type = visualization_msgs::msg::Marker::POINTS;
+  polygon_points_marker.action = visualization_msgs::msg::Marker::MODIFY;
+  polygon_points_marker.color.r = 0;
+  polygon_points_marker.color.g = 0;
+  polygon_points_marker.color.b = 0;
+  polygon_points_marker.color.a = 1;
+
+  polygon_points_marker.pose.position.x = 0;
+  polygon_points_marker.pose.position.y = 0;
+  polygon_points_marker.pose.position.z = 0;
+  polygon_points_marker.pose.orientation.x = 0;
+  polygon_points_marker.pose.orientation.y = 0;
+  polygon_points_marker.pose.orientation.z = 0;
+  polygon_points_marker.pose.orientation.w = 1;
+  polygon_points_marker.scale.x = 0.3;
+  polygon_points_marker.scale.y = 0.3;
+  polygon_points_marker.scale.z = 0.0;
+
+  polygon_points_marker.points.clear();
+
+  unsigned int id = 0;
+  for (const auto& pose : pose_graph.getPoseGraphPoses()) {
+    std::cout << "Pose id: " << pose.getId() << std::endl;
+    visualization_msgs::msg::Marker polygon_marker = polygon_marker_template;
+    polygon_marker.id = id++;
+    polygon_marker.points.clear();
+    polygon_marker.colors.clear();
+
+    auto polygon_pose = pose.getPolygon();
+    auto pose_world = pose_graph_transformations[pose.getId()];
+    auto polygon_world = polygon_pose.transformPolygon(pose_world);
+
+    auto points = polygon_world.getPoints();
+    auto edge_types = polygon_world.getEdgeTypes();
+    for (unsigned int i = 0; i < polygon_world.getPoints().size(); ++i) {
+      geometry_msgs::msg::Point marker_point;
+      marker_point.x = points.at(i).getX();
+      marker_point.y = points.at(i).getY();
+      marker_point.z = 0;
+
+      std_msgs::msg::ColorRGBA edge_color;
+      edge_color.r = 0.0;
+      edge_color.g = 0.0;
+      edge_color.b = 0.0;
+      edge_color.a = 1.0;
+
+      std::cout << "Point " << i << ": edge type: " << edge_types[i]
+                << std::endl;
+      if (edge_types[i] == EdgeType::OBSTACLE) {
+        edge_color.r = 1.0;
+        edge_color.g = 0.0;
+        edge_color.b = 0.0;
+      } else if (edge_types[i] == EdgeType::FRONTIER) {
+        edge_color.r = 0.0;
+        edge_color.g = 0.0;
+        edge_color.b = 1.0;
+      }
+
+      std_msgs::msg::ColorRGBA point_color;
+      point_color.r = 0.0;
+      point_color.g = 0.0;
+      point_color.b = 0.0;
+      point_color.a = 1.0;
+
+      if (points.at(i).getPointType() == PointType::MAX_RANGE) {
+        point_color.b = 1.0;
+      } else if (points.at(i).getPointType() == PointType::OBSTACLE) {
+        point_color.r = 1.0;
+      }
+
+      if (i > 0) {
+        polygon_marker.points.push_back(marker_point);
+        polygon_marker.colors.push_back(polygon_marker.colors.back());
+      }
+      polygon_marker.points.push_back(marker_point);
+      polygon_marker.colors.push_back(edge_color);
+
+      polygon_points_marker.points.push_back(marker_point);
+      polygon_points_marker.colors.push_back(point_color);
+    }
+
+    polygon_markers.markers.push_back(polygon_marker);
+  }
+  polygonVisualizationPublisher_->publish(polygon_markers);
+  polygonPointsVisualizationPublisher_->publish(polygon_points_marker);
 
   std::cout << "Updated visualization." << std::endl;
 }
