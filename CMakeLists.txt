@@ -11,7 +11,7 @@ if(NOT CMAKE_CXX_STANDARD)
 endif()
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  add_compile_options(-g -ggdb3 -Wall -Wall -Wextra -Wpedantic)
+  add_compile_options(-g -ggdb3 -Wall -Wall -Wextra -Wpedantic -lprofiler)
 endif()
 
 find_package(ament_cmake REQUIRED)
