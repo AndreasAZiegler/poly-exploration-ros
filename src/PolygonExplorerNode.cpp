@@ -189,7 +189,7 @@ PolygonExplorerNode::createPoseGraphMarker(
   pose_graph_marker.pose.orientation.y = 0;
   pose_graph_marker.pose.orientation.z = 0;
   pose_graph_marker.pose.orientation.w = 1;
-  pose_graph_marker.scale.x = 0.1;
+  pose_graph_marker.scale.x = 0.025;
   pose_graph_marker.scale.y = 0.0;
   pose_graph_marker.scale.z = 0.0;
 
@@ -287,7 +287,7 @@ PolygonExplorerNode::createPolygonMarkers(
   polygon_marker_template.pose.orientation.y = 0;
   polygon_marker_template.pose.orientation.z = 0;
   polygon_marker_template.pose.orientation.w = 1;
-  polygon_marker_template.scale.x = 0.1;
+  polygon_marker_template.scale.x = 0.013;
   polygon_marker_template.scale.y = 0.0;
   polygon_marker_template.scale.z = 0.0;
 
@@ -313,8 +313,8 @@ PolygonExplorerNode::createPolygonMarkers(
   polygon_points_marker.pose.orientation.y = 0;
   polygon_points_marker.pose.orientation.z = 0;
   polygon_points_marker.pose.orientation.w = 1;
-  polygon_points_marker.scale.x = 0.3;
-  polygon_points_marker.scale.y = 0.3;
+  polygon_points_marker.scale.x = 0.035;
+  polygon_points_marker.scale.y = 0.035;
   polygon_points_marker.scale.z = 0.0;
 
   polygon_points_marker.points.clear();
