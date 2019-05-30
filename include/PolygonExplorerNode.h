@@ -39,6 +39,16 @@ class PolygonExplorerNode : public rclcpp::Node,
   void convertFromRosGeometryMsg(
       const geometry_msgs::msg::Point& geometryPointMsg, Position& position);
 
+  std::tuple<visualization_msgs::msg::Marker, std::map<unsigned int, Pose>>
+  createPoseGraphMarker(const PoseGraph& pose_graph,
+                        const std_msgs::msg::Header& header);
+
+  std::tuple<visualization_msgs::msg::MarkerArray,
+             visualization_msgs::msg::Marker>
+  createPolygonMarkers(const PoseGraph& pose_graph,
+                       std::map<unsigned int, Pose> pose_graph_transformations,
+                       const std_msgs::msg::Header& header);
+
   PolygonExplorer polygonExplorer_;
 
   Pose previousPose_;

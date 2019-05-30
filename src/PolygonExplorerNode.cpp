@@ -3,6 +3,7 @@
 
 #include "PolygonExplorerNode.h"
 #include <glog/logging.h>
+#include <cmath>
 #include <functional>
 #include "std_msgs/msg/header.hpp"
 
@@ -30,6 +31,29 @@ PolygonExplorerNode::PolygonExplorerNode()
 void PolygonExplorerNode::subscriberCallback(
     const std::shared_ptr<nav_msgs::msg::Odometry>& odometry,
     const std::shared_ptr<sensor_msgs::msg::LaserScan>& laser_scan) {
+
+  Pose current_pose;
+  convertFromRosGeometryMsg(odometry->pose, current_pose);
+  auto position_diff = current_pose.getPosition() - previousPose_.getPosition();
+  // std::cout << "position_diff: " << position_diff << std::endl;
+
+  // Return (and do not update pose graph) if the robot did not move enough
+  if (position_diff.norm() < 0.1) {
+    return;
+  }
+
+  // Orientation difference of quaternions
+  // (http://www.boris-belousov.net/2016/12/01/quat-dist/)
+  auto orientation_diff =
+      current_pose.getRotation() * previousPose_.getRotation().conjugated();
+  // Transform transformation into frame of previous pose
+  auto transformation_previous_pose_current_pose =
+      Pose(previousPose_.getRotation().rotate(position_diff),
+           previousPose_.getRotation() * orientation_diff);
+
+  previousPose_ = current_pose;
+
+  // Create polygon
   std::vector<PolygonPoint> polygon_points;
   for (unsigned int i = 0; i < 5; ++i) {
     double theta = laser_scan->angle_min;
@@ -53,12 +77,25 @@ void PolygonExplorerNode::subscriberCallback(
       point_type = PointType::OBSTACLE;
     }
 
+    // Check if there is a possible occlusion
+    if (fabs(polygon_points.back().getX() - x) > 1.0 ||
+        fabs(polygon_points.back().getY() - y) > 1.0) {
+      // Add MAX_RANGE point in the middle to get a frontier
+      double theta = laser_scan->angle_min + i * laser_scan->angle_increment;
+      double x = (laser_scan->ranges.at(i) / 2) * cos(theta);
+      double y = (laser_scan->ranges.at(i) / 2) * sin(theta);
+
+      PointType point_type = PointType::MAX_RANGE;
+
+      polygon_points.emplace_back(x, y, point_type);
+    }
+
     polygon_points.emplace_back(x, y, point_type);
   }
 
   for (unsigned int i = 0; i < 5; ++i) {
     double theta = laser_scan->angle_max;
-    double range = *(laser_scan->ranges.end()) * i / 5;
+    double range = *(laser_scan->ranges.end()) * (5 - 1 - i) / 5;
     double x = range * cos(theta);
     double y = range * sin(theta);
 
@@ -67,43 +104,7 @@ void PolygonExplorerNode::subscriberCallback(
   }
   polygon_points.emplace_back(*polygon_points.begin());
 
-  // Polygon has to be closed (first and last point have to be the same)
-  /*
-  double theta = laser_scan->angle_min + 0 * laser_scan->angle_increment;
-  double x = laser_scan->ranges.at(0) * cos(theta);
-  double y = laser_scan->ranges.at(0) * sin(theta);
-  PointType point_type;
-  if (laser_scan->ranges.at(0) >= laser_scan->range_max) {
-    point_type = PointType::MAX_RANGE;
-  } else {
-    point_type = PointType::OBSTACLE;
-  }
-
-  polygon_points.emplace_back(x, y, point_type);
-  */
-
   Polygon polygon(polygon_points);
-
-  Pose current_pose;
-  convertFromRosGeometryMsg(odometry->pose, current_pose);
-  auto position_diff = current_pose.getPosition() - previousPose_.getPosition();
-  // std::cout << "position_diff: " << position_diff << std::endl;
-
-  // Return (and do not update pose graph) if the robot did not move enough
-  if (position_diff.norm() < 0.1) {
-    return;
-  }
-
-  // Orientation difference of quaternions
-  // (http://www.boris-belousov.net/2016/12/01/quat-dist/)
-  auto orientation_diff =
-      current_pose.getRotation() * previousPose_.getRotation().conjugated();
-  // Transform transformation into frame of previous pose
-  auto transformation_previous_pose_current_pose =
-      Pose(previousPose_.getRotation().rotate(position_diff),
-           previousPose_.getRotation() * orientation_diff);
-
-  previousPose_ = current_pose;
 
   // std::cout << "transformation_previous_pose_current_pose: " << std::endl
   //          << transformation_previous_pose_current_pose << std::endl;
@@ -152,6 +153,23 @@ void PolygonExplorerNode::updateVisualizationCallback(
   header.stamp.sec = time_stamp.sec;
   header.stamp.nanosec = time_stamp.nanosec;
 
+  auto[pose_graph_marker, pose_graph_transformations] =
+      createPoseGraphMarker(pose_graph, header);
+
+  poseGraphVisualizationPublisher_->publish(pose_graph_marker);
+
+  auto[polygon_markers, polygon_points_marker] =
+      createPolygonMarkers(pose_graph, pose_graph_transformations, header);
+
+  polygonVisualizationPublisher_->publish(polygon_markers);
+  polygonPointsVisualizationPublisher_->publish(polygon_points_marker);
+
+  std::cout << "Updated visualization." << std::endl;
+}
+
+std::tuple<visualization_msgs::msg::Marker, std::map<unsigned int, Pose>>
+PolygonExplorerNode::createPoseGraphMarker(
+    const PoseGraph& pose_graph, const std_msgs::msg::Header& header) {
   visualization_msgs::msg::Marker pose_graph_marker;
   pose_graph_marker.header = header;
   // pose_graph_marker.ns = "pose_graph";
@@ -212,17 +230,16 @@ void PolygonExplorerNode::updateVisualizationCallback(
       }
       pose_graph_transformations[adjacent_id] =
           origin_to_adjacent_transformation;
-      /*
-      std::cout << "Origin to " << id_to_check
-                << " transformation: " << std::endl
-                << pose_graph_transformations[id_to_check] << std::endl;
-      std::cout << "pose " << id_to_check << " to pose " << adjacent_id
-                << " transformation: " << std::endl
-                << check_to_adjacent_transformation << std::endl;
-      std::cout << "Origin to " << adjacent_id
-                << " transformation: " << std::endl
-                << origin_to_adjacent_transformation << std::endl;
-      */
+
+      // std::cout << "Origin to " << id_to_check
+      //          << " transformation: " << std::endl
+      //          << pose_graph_transformations[id_to_check] << std::endl;
+      // std::cout << "pose " << id_to_check << " to pose " << adjacent_id
+      //          << " transformation: " << std::endl
+      //          << check_to_adjacent_transformation << std::endl;
+      // std::cout << "Origin to " << adjacent_id
+      //          << " transformation: " << std::endl
+      //          << origin_to_adjacent_transformation << std::endl;
 
       geometry_msgs::msg::Point point_1;
       point_1.x = pose_graph_transformations[id_to_check].getPosition().x();
@@ -238,8 +255,15 @@ void PolygonExplorerNode::updateVisualizationCallback(
     }
   }
 
-  poseGraphVisualizationPublisher_->publish(pose_graph_marker);
+  return std::make_tuple(pose_graph_marker, pose_graph_transformations);
+}
 
+std::tuple<visualization_msgs::msg::MarkerArray,
+           visualization_msgs::msg::Marker>
+PolygonExplorerNode::createPolygonMarkers(
+    const PoseGraph& pose_graph,
+    std::map<unsigned int, Pose> pose_graph_transformations,
+    const std_msgs::msg::Header& header) {
   visualization_msgs::msg::MarkerArray polygon_markers;
   polygon_markers.markers.clear();
 
@@ -358,10 +382,8 @@ void PolygonExplorerNode::updateVisualizationCallback(
 
     polygon_markers.markers.push_back(polygon_marker);
   }
-  polygonVisualizationPublisher_->publish(polygon_markers);
-  polygonPointsVisualizationPublisher_->publish(polygon_points_marker);
 
-  std::cout << "Updated visualization." << std::endl;
+  return std::make_tuple(polygon_markers, polygon_points_marker);
 }
 
 #include "class_loader/register_macro.hpp"
